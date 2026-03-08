@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StegGate — Secure Image Upload Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0a0a0f;
+  --surface:   #111118;
+  --border:    #1e1e2e;
+  --dim:       #252535;
+  --text:      #e2e2f0;
+  --muted:     #6b6b88;
+  --accent:    #00e5a0;
+  --accent2:   #7c6af7;
+  --danger:    #ff4f6a;
+  --warn:      #ffa733;
+  --clean:     #00e5a0;
+  --mono:      'Space Mono', monospace;
+  --sans:      'DM Sans', sans-serif;
+  --r:         8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+.page { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+/* ── Header ─────────────────────────────────────────────────────── */
+header { margin-bottom: 56px; }
+.wordmark {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.wordmark::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+h1 {
+  font-family: var(--sans);
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text);
+}
+h1 strong { font-weight: 500; color: var(--accent); }
+.subtitle {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 480px;
+}
+
+/* ── Architecture Flow ───────────────────────────────────────────── */
+.arch {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 48px;
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+.arch-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.arch-box {
+  background: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 14px;
+  color: var(--text);
+  white-space: nowrap;
+  font-size: 10px;
+  transition: all 0.3s;
+}
+.arch-box.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 16px rgba(0,229,160,0.15);
+}
+.arch-box.threat { border-color: var(--danger); color: var(--danger); }
+.arch-box.clean  { border-color: var(--clean);  color: var(--clean); }
+.arch-label { color: var(--muted); font-size: 9px; }
+.arch-arrow {
+  color: var(--muted);
+  padding: 0 6px;
+  font-size: 14px;
+  flex-shrink: 0;
+  line-height: 1;
+  padding-top: 2px;
+}
+
+/* ── Config strip ─────────────────────────────────────────────────── */
+.config {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 180px;
+}
+.config-field label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.config-field input, .config-field select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.config-field input:focus, .config-field select:focus {
+  border-color: var(--accent2);
+}
+.config-field select option { background: var(--surface); }
+
+/* ── Toggle ───────────────────────────────────────────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.toggle-row label { font-size: 13px; color: var(--muted); cursor: pointer; }
+input[type=checkbox] {
+  appearance: none;
+  width: 34px; height: 18px;
+  background: var(--dim);
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+}
+input[type=checkbox]::after {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  background: var(--muted);
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: transform 0.2s, background 0.2s;
+}
+input[type=checkbox]:checked { background: rgba(0,229,160,0.2); border-color: var(--accent); }
+input[type=checkbox]:checked::after { transform: translateX(16px); background: var(--accent); }
+
+/* ── Upload zone ──────────────────────────────────────────────────── */
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--r);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s;
+  position: relative;
+  background: var(--surface);
+  margin-bottom: 24px;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent2);
+  background: rgba(124,106,247,0.04);
+}
+.drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-icon { font-size: 32px; margin-bottom: 12px; }
+.drop-title { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+.drop-sub { font-size: 13px; color: var(--muted); }
+
+/* ── Btn ─────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: var(--r);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+}
+.btn-primary:hover { filter: brightness(1.15); }
+.btn-primary:disabled {
+  background: var(--dim);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-ghost:hover { border-color: var(--accent2); }
+
+/* ── Progress pipeline ───────────────────────────────────────────── */
+.pipeline { display: none; margin-bottom: 32px; }
+.pipeline.visible { display: block; }
+.pipeline-track {
+  height: 2px;
+  background: var(--dim);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.pipeline-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+.pipeline-steps {
+  display: flex;
+  gap: 0;
+}
+.pip-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  flex: 1;
+  transition: color 0.3s;
+}
+.pip-step.done  { color: var(--accent); }
+.pip-step.active { color: var(--accent2); }
+.pip-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+.pip-step.done  .pip-dot { background: var(--accent); border-color: var(--accent); }
+.pip-step.active .pip-dot {
+  background: var(--accent2);
+  border-color: var(--accent2);
+  box-shadow: 0 0 8px var(--accent2);
+  animation: blink 0.8s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── Results ────────────────────────────────────────────────────── */
+.result-panel {
+  display: none;
+  margin-top: 32px;
+}
+.result-panel.visible { display: block; }
+
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: var(--r);
+  border: 1px solid;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.verdict::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+}
+.verdict.threat {
+  border-color: var(--danger);
+  background: rgba(255,79,106,0.05);
+}
+.verdict.threat::before { background: var(--danger); }
+.verdict.clean {
+  border-color: var(--clean);
+  background: rgba(0,229,160,0.05);
+}
+.verdict.clean::before { background: var(--clean); }
+
+.verdict-icon { font-size: 28px; flex-shrink: 0; }
+.verdict-body { flex: 1; }
+.verdict-title { font-size: 18px; font-weight: 500; margin-bottom: 2px; }
+.verdict-sub   { font-size: 13px; color: var(--muted); }
+
+.risk-badge {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.threat .risk-badge { color: var(--danger); }
+.clean  .risk-badge { color: var(--clean); }
+
+/* ── Image comparison ───────────────────────────────────────────── */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media(max-width: 600px) { .compare { grid-template-columns: 1fr; } }
+
+.img-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.img-card-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.img-card-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.img-card-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.badge-original { background: rgba(107,107,136,0.2); color: var(--muted); }
+.badge-clean    { background: rgba(0,229,160,0.15);  color: var(--clean); }
+.badge-threat   { background: rgba(255,79,106,0.15); color: var(--danger); }
+
+.img-card img {
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+  display: block;
+}
+.img-card-footer {
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* ── Metrics ─────────────────────────────────────────────────────── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+}
+.metric-label { font-family: var(--mono); font-size: 9px; color: var(--muted);
+                text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+.metric-value { font-family: var(--mono); font-size: 18px; color: var(--text); font-weight: 700; }
+.metric-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── Storage log ────────────────────────────────────────────────── */
+.storage-log {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.storage-log-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  display: flex; align-items: center; gap: 8px;
+}
+.log-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  animation: slideIn 0.3s ease;
+}
+@keyframes slideIn { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform:none; } }
+.log-entry:last-child { border-bottom: none; }
+.log-time  { color: var(--muted); flex-shrink: 0; }
+.log-file  { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-status { flex-shrink: 0; padding: 2px 8px; border-radius: 3px; font-size: 10px; }
+.log-stored   { background: rgba(0,229,160,0.1); color: var(--clean); }
+.log-sanitized{ background: rgba(255,167,51,0.1); color: var(--warn); }
+.log-threat   { background: rgba(255,79,106,0.1); color: var(--danger); }
+
+/* ── Actions ─────────────────────────────────────────────────────── */
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ── Code block ─────────────────────────────────────────────────── */
+.code-section { margin-top: 48px; }
+.code-section h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+}
+.code-tabs { display: flex; gap: 2px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.code-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  margin-bottom: -1px;
+}
+.code-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.code-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--r) var(--r);
+  padding: 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
+}
+.kw  { color: var(--accent2); }
+.str { color: var(--accent); }
+.cm  { color: var(--muted); font-style: italic; }
+.fn  { color: #7ec8e3; }
+.num { color: var(--warn); }
+
+/* ── Footer ─────────────────────────────────────────────────────── */
+footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header>
+    <div class="wordmark">StegGate — Secure Image Pipeline</div>
+    <h1>Upload images.<br><strong>Steganography removed.</strong> Automatically.</h1>
+    <p class="subtitle">
+      Every image passes through the StegGate engine before storage.
+      Threats are sanitized via JPEG DCT recompression — hidden payloads destroyed.
+    </p>
+  </header>
+
+  <!-- Architecture flow -->
+  <div class="arch" id="archFlow">
+    <div class="arch-step">
+      <div class="arch-box" id="arch-upload">USER UPLOADS</div>
+      <div class="arch-label">website</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-step">
+      <div class="arch-box" id="arch-api">POST /api/sanitize</div>
+      <div class="arch-label">steggate api</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-step">
+      <div class="arch-box" id="arch-scan">SCANNING</div>
+      <div class="arch-label">engine v5</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-step">
+      <div class="arch-box" id="arch-decide">DECIDE</div>
+      <div class="arch-label">threat?</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-step">
+      <div class="arch-box" id="arch-sanitize">SANITIZE</div>
+      <div class="arch-label">if malicious</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-step">
+      <div class="arch-box" id="arch-store">STORE</div>
+      <div class="arch-label">clean image</div>
+    </div>
+  </div>
+
+  <!-- Config -->
+  <div class="config">
+    <div class="config-field">
+      <label>StegGate API URL</label>
+      <input id="apiUrl" value="http://localhost:5050" placeholder="http://localhost:5050">
+    </div>
+    <div class="config-field">
+      <label>API Key (optional)</label>
+      <input id="apiKey" type="password" placeholder="Bearer token — leave blank if auth disabled">
+    </div>
+    <div class="config-field">
+      <label>Scan Mode</label>
+      <select id="scanMode">
+        <option value="auto">Auto — sanitize only if threat</option>
+        <option value="force">Force — always sanitize</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/bmp,image/webp">
+    <div class="drop-icon">📁</div>
+    <div class="drop-title">Drop an image or click to browse</div>
+    <div class="drop-sub">PNG, JPG, BMP, WEBP — max 50 MB</div>
+  </div>
+
+  <div style="display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap; align-items:center;">
+    <button class="btn btn-primary" id="scanBtn" disabled>
+      <span>⬡</span> Scan &amp; Sanitize
+    </button>
+    <button class="btn btn-ghost" id="resetBtn">Reset</button>
+    <div class="toggle-row" style="margin:0">
+      <input type="checkbox" id="autoDownload">
+      <label for="autoDownload">Auto-download clean image</label>
+    </div>
+  </div>
+
+  <!-- Pipeline progress -->
+  <div class="pipeline" id="pipeline">
+    <div class="pipeline-track"><div class="pipeline-fill" id="pipelineFill"></div></div>
+    <div class="pipeline-steps">
+      <div class="pip-step" id="pip-upload"><div class="pip-dot"></div>UPLOADING</div>
+      <div class="pip-step" id="pip-scan">  <div class="pip-dot"></div>SCANNING</div>
+      <div class="pip-step" id="pip-decide"><div class="pip-dot"></div>DECIDING</div>
+      <div class="pip-step" id="pip-clean"> <div class="pip-dot"></div>STORING</div>
+    </div>
+  </div>
+
+  <!-- Result panel -->
+  <div class="result-panel" id="resultPanel">
+
+    <!-- Verdict -->
+    <div class="verdict" id="verdictBox">
+      <div class="verdict-icon" id="verdictIcon"></div>
+      <div class="verdict-body">
+        <div class="verdict-title" id="verdictTitle"></div>
+        <div class="verdict-sub"  id="verdictSub"></div>
+      </div>
+      <div class="risk-badge" id="riskBadge"></div>
+    </div>
+
+    <!-- Image comparison -->
+    <div class="compare">
+      <div class="img-card">
+        <div class="img-card-header">
+          <span class="img-card-label">Original Upload</span>
+          <span class="img-card-badge badge-original" id="origBadge">UPLOADED</span>
+        </div>
+        <img id="origPreview" src="" alt="original">
+        <div class="img-card-footer" id="origMeta"></div>
+      </div>
+      <div class="img-card">
+        <div class="img-card-header">
+          <span class="img-card-label">After StegGate</span>
+          <span class="img-card-badge" id="cleanBadge">CLEAN</span>
+        </div>
+        <img id="cleanPreview" src="" alt="sanitized">
+        <div class="img-card-footer" id="cleanMeta"></div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Risk Score</div>
+        <div class="metric-value" id="mRisk">—</div>
+        <div class="metric-sub">out of 100</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Scan Time</div>
+        <div class="metric-value" id="mTime">—</div>
+        <div class="metric-sub">milliseconds</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Sanitized</div>
+        <div class="metric-value" id="mSanitized">—</div>
+        <div class="metric-sub">payload wiped</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Output Size</div>
+        <div class="metric-value" id="mSize">—</div>
+        <div class="metric-sub">clean file</div>
+      </div>
+    </div>
+
+    <!-- Storage log -->
+    <div class="storage-log">
+      <div class="storage-log-header">
+        <span>💾</span> SIMULATED STORAGE LOG
+        <span style="margin-left:auto;font-size:9px;">files/clean/</span>
+      </div>
+      <div id="storageLog"></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn btn-primary" id="downloadBtn">⬇ Download Clean Image</button>
+      <button class="btn btn-ghost"   id="storeBtn">💾 Store to Server</button>
+      <button class="btn btn-ghost"   id="rescanBtn">↺ Upload Another</button>
+    </div>
+
+  </div>
+
+  <!-- Code examples -->
+  <div class="code-section">
+    <h3>Integration Examples</h3>
+    <div class="code-tabs">
+      <button class="code-tab active" onclick="showTab('js')">JavaScript</button>
+      <button class="code-tab" onclick="showTab('python')">Python / Flask</button>
+      <button class="code-tab" onclick="showTab('curl')">cURL</button>
+      <button class="code-tab" onclick="showTab('node')">Node.js</button>
+    </div>
+    <div class="code-block" id="codeBlock"></div>
+  </div>
+
+  <footer>
+    <span>StegGate v5.0 — Steganography Detection & Sanitization</span>
+    <span id="apiStatus">● checking api…</span>
+  </footer>
+
+</div>
+
+<script>
+// ── State ───────────────────────────────────────────────────────────────────
+let selectedFile = null;
+let currentResult = null;
+let origURL = null;
+let cleanURL = null;
+let scanCount = 0;
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const dropZone   = $("dropZone");
+const fileInput  = $("fileInput");
+const scanBtn    = $("scanBtn");
+const resetBtn   = $("resetBtn");
+const pipeline   = $("pipeline");
+const resultPanel= $("resultPanel");
+
+// ── File selection ─────────────────────────────────────────────────────────────
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) selectFile(fileInput.files[0]);
+});
+
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault(); dropZone.classList.add("drag-over");
+});
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);
+});
+
+function selectFile(f) {
+  selectedFile = f;
+  scanBtn.disabled = false;
+  dropZone.querySelector(".drop-title").textContent = f.name;
+  dropZone.querySelector(".drop-sub").textContent =
+    `${(f.size/1024).toFixed(1)} KB — ready to scan`;
+  dropZone.style.borderColor = "var(--accent2)";
+
+  if (origURL) URL.revokeObjectURL(origURL);
+  origURL = URL.createObjectURL(f);
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────────
+scanBtn.addEventListener("click", async () => {
+  if (!selectedFile) return;
+  await runPipeline(selectedFile);
+});
+
+async function runPipeline(file) {
+  const apiUrl = $("apiUrl").value.trim().replace(/\/$/, "");
+  const apiKey = $("apiKey").value.trim();
+  const force  = $("scanMode").value === "force";
+
+  // Reset UI
+  scanBtn.disabled = true;
+  resultPanel.classList.remove("visible");
+  pipeline.classList.add("visible");
+  setPipelineStep("upload");
+  archHighlight("arch-upload");
+  archHighlight("arch-api");
+
+  // Build request
+  const form = new FormData();
+  form.append("file",  file, file.name);
+  form.append("force", String(force));
+
+  const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+
+  setPipelineStep("scan");
+  archHighlight("arch-scan");
+
+  let resp;
+  try {
+    resp = await fetch(`${apiUrl}/api/sanitize`, { method:"POST", body:form, headers });
+  } catch(e) {
+    showError(`Cannot reach StegGate at ${apiUrl}\n${e.message}`);
+    return;
+  }
+
+  if (!resp.ok) {
+    let msg = resp.statusText;
+    try { msg = (await resp.json()).detail || msg; } catch {}
+    showError(`API error ${resp.status}: ${msg}`);
+    return;
+  }
+
+  setPipelineStep("decide");
+  archHighlight("arch-decide");
+
+  const blob        = await resp.blob();
+  const h           = resp.headers;
+  const isThreat    = h.get("x-threat-detected")  === "true";
+  const riskScore   = parseFloat(h.get("x-risk-score")       || "0");
+  const wasSanitized= h.get("x-was-sanitized")    === "true";
+  const outName     = parseFilename(h.get("content-disposition") || "", file.name);
+  const durationMs  = parseInt(h.get("x-scan-duration-ms") || "0", 10);
+
+  currentResult = { blob, isThreat, riskScore, wasSanitized, outName, durationMs };
+
+  setPipelineStep("clean");
+  archHighlight(isThreat ? "arch-sanitize" : "arch-decide");
+  setTimeout(() => archHighlight("arch-store"), 400);
+
+  // Show result
+  showResult(file, blob, { isThreat, riskScore, wasSanitized, outName, durationMs });
+  addStorageLog(outName, wasSanitized, isThreat);
+  scanCount++;
+
+  if ($("autoDownload").checked && wasSanitized) {
+    triggerDownload(blob, outName);
+  }
+
+  pipeline.classList.remove("visible");
+  resultPanel.classList.add("visible");
+  scanBtn.disabled = false;
+}
+
+// ── Result display ─────────────────────────────────────────────────────────────
+function showResult(origFile, cleanBlob, { isThreat, riskScore, wasSanitized, outName, durationMs }) {
+  // Verdict
+  const box = $("verdictBox");
+  box.className = `verdict ${isThreat ? "threat" : "clean"}`;
+  $("verdictIcon").textContent = isThreat ? "⚠" : "✓";
+  $("verdictTitle").textContent = isThreat
+    ? "Steganographic payload detected"
+    : "Image is clean — no threats found";
+  $("verdictSub").textContent = isThreat
+    ? `Hidden data wiped via JPEG DCT recompression. Clean file ready to store.`
+    : `No embedded data detected. Original returned unchanged.`;
+  $("riskBadge").textContent = `${riskScore.toFixed(1)}%`;
+
+  // Images
+  $("origPreview").src = origURL;
+  $("origMeta").textContent = `${origFile.name}  ·  ${fmt(origFile.size)}`;
+  const origBadge = $("origBadge");
+  origBadge.className = `img-card-badge ${isThreat ? "badge-threat" : "badge-original"}`;
+  origBadge.textContent = isThreat ? "INFECTED" : "CLEAN";
+
+  if (cleanURL) URL.revokeObjectURL(cleanURL);
+  cleanURL = URL.createObjectURL(cleanBlob);
+  $("cleanPreview").src = cleanURL;
+  $("cleanMeta").textContent = `${outName}  ·  ${fmt(cleanBlob.size)}`;
+  const cleanBadge = $("cleanBadge");
+  cleanBadge.className = `img-card-badge ${wasSanitized ? "badge-clean" : "badge-original"}`;
+  cleanBadge.textContent = wasSanitized ? "SANITIZED" : "UNCHANGED";
+
+  // Metrics
+  $("mRisk").textContent = riskScore.toFixed(1);
+  $("mTime").textContent = durationMs.toLocaleString();
+  $("mSanitized").textContent = wasSanitized ? "YES" : "NO";
+  $("mSize").textContent = fmt(cleanBlob.size);
+}
+
+// ── Storage log ────────────────────────────────────────────────────────────────
+function addStorageLog(filename, wasSanitized, isThreat) {
+  const log = $("storageLog");
+  const now = new Date().toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  const row = document.createElement("div");
+  row.className = "log-entry";
+  const statusClass = wasSanitized ? "log-sanitized" : "log-stored";
+  const statusText  = wasSanitized ? "SANITIZED + STORED" : "STORED";
+  row.innerHTML = `
+    <span class="log-time">${now}</span>
+    <span class="log-file">files/clean/${filename}</span>
+    <span class="log-status ${statusClass}">${statusText}</span>
+  `;
+  log.prepend(row);
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+$("downloadBtn").addEventListener("click", () => {
+  if (!currentResult) return;
+  triggerDownload(currentResult.blob, currentResult.outName);
+});
+
+$("storeBtn").addEventListener("click", () => {
+  if (!currentResult) return;
+  // Simulated store: in a real site this would POST to /api/store or an S3 pre-signed URL
+  const { blob, outName, isThreat, riskScore } = currentResult;
+  addStorageLog(`[re-stored] ${outName}`, true, isThreat);
+  $("storeBtn").textContent = "✓ Stored";
+  setTimeout(() => $("storeBtn").textContent = "💾 Store to Server", 2000);
+});
+
+resetBtn.addEventListener("click", reset);
+$("rescanBtn").addEventListener("click", reset);
+
+function reset() {
+  selectedFile = null;
+  currentResult = null;
+  fileInput.value = "";
+  scanBtn.disabled = true;
+  dropZone.querySelector(".drop-title").textContent = "Drop an image or click to browse";
+  dropZone.querySelector(".drop-sub").textContent = "PNG, JPG, BMP, WEBP — max 50 MB";
+  dropZone.style.borderColor = "";
+  pipeline.classList.remove("visible");
+  resultPanel.classList.remove("visible");
+  resetArch();
+}
+
+// ── Pipeline steps ────────────────────────────────────────────────────────────
+function setPipelineStep(step) {
+  const steps = ["upload","scan","decide","clean"];
+  const idx   = steps.indexOf(step);
+  const fills  = [25, 50, 75, 100];
+  $("pipelineFill").style.width = (fills[idx] || 0) + "%";
+  steps.forEach((s, i) => {
+    const el = $(`pip-${s}`);
+    el.className = "pip-step" + (i < idx ? " done" : i === idx ? " active" : "");
+  });
+}
+
+// ── Arch highlight ────────────────────────────────────────────────────────────
+function archHighlight(id) {
+  document.querySelectorAll(".arch-box").forEach(el => {
+    el.classList.remove("active","threat","clean");
+  });
+  const el = $(id);
+  if (el) el.classList.add("active");
+}
+function resetArch() {
+  document.querySelectorAll(".arch-box").forEach(el => {
+    el.classList.remove("active","threat","clean");
+  });
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function fmt(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + " KB";
+  return (bytes/(1024*1024)).toFixed(2) + " MB";
+}
+function triggerDownload(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function parseFilename(disp, fallback) {
+  const m = disp.match(/filename="?([^";\r\n]+)"?/);
+  return m ? m[1] : fallback;
+}
+function showError(msg) {
+  pipeline.classList.remove("visible");
+  scanBtn.disabled = false;
+  alert("StegGate error:\n" + msg);
+}
+
+// ── API health check ──────────────────────────────────────────────────────────
+async function checkHealth() {
+  const url = $("apiUrl").value.trim().replace(/\/$/, "");
+  try {
+    const r = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(4000) });
+    const d = await r.json();
+    $("apiStatus").textContent = `● api ${d.status}  v${d.version}`;
+    $("apiStatus").style.color = "var(--clean)";
+  } catch {
+    $("apiStatus").textContent = "● api offline";
+    $("apiStatus").style.color = "var(--danger)";
+  }
+}
+$("apiUrl").addEventListener("change", checkHealth);
+checkHealth();
+
+// ── Code examples ─────────────────────────────────────────────────────────────
+const CODE = {
+js: `<span class="cm">// Browser — vanilla JS (uses steggate.js SDK)</span>
+<span class="kw">const</span> client = <span class="kw">new</span> <span class="fn">StegGate</span>(<span class="str">"http://localhost:5050"</span>);
+
+<span class="cm">// Watch a file input — auto-scan on change</span>
+client.<span class="fn">watchInput</span>(
+  document.<span class="fn">querySelector</span>(<span class="str">"#avatar"</span>),
+  document.<span class="fn">querySelector</span>(<span class="str">"#preview"</span>),
+  (result) <span class="kw">=></span> {
+    console.<span class="fn">log</span>(<span class="str">"Threat:"</span>, result.isThreat);
+    console.<span class="fn">log</span>(<span class="str">"Risk:"</span>,   result.riskScore);
+    console.<span class="fn">log</span>(<span class="str">"Sanitized:"</span>, result.wasSanitized);
+  }
+);
+
+<span class="cm">// Or call directly</span>
+<span class="kw">const</span> result = <span class="kw">await</span> client.<span class="fn">sanitize</span>(file);
+<span class="kw">await</span> result.<span class="fn">uploadToServer</span>(<span class="str">"/api/store-image"</span>);`,
+
+python: `<span class="cm"># Flask — automatic middleware (steggate_client.py SDK)</span>
+<span class="kw">from</span> flask <span class="kw">import</span> Flask, request
+<span class="kw">from</span> steggate_client <span class="kw">import</span> StegGateClient, StegGateFlaskMiddleware
+
+app    = Flask(__name__)
+client = <span class="fn">StegGateClient</span>(<span class="str">"http://localhost:5050"</span>)
+
+<span class="cm"># Auto-intercept upload fields before view runs</span>
+<span class="fn">StegGateFlaskMiddleware</span>(app, client,
+    upload_fields=[<span class="str">"avatar"</span>, <span class="str">"photo"</span>])
+
+<span class="kw">@</span>app.<span class="fn">route</span>(<span class="str">"/upload"</span>, methods=[<span class="str">"POST"</span>])
+<span class="kw">def</span> <span class="fn">upload</span>():
+    f = request.files[<span class="str">"avatar"</span>]  <span class="cm"># already sanitized ✓</span>
+    f.<span class="fn">save</span>(f<span class="str">"uploads/{f.filename}"</span>)
+    <span class="kw">return</span> {<span class="str">"stored"</span>: f.filename}`,
+
+curl: `<span class="cm"># Basic — returns clean JPEG, decision in headers</span>
+curl -X POST http://localhost:<span class="num">5050</span>/api/sanitize \\
+  -F <span class="str">"file=@photo.jpg"</span> \\
+  -D - \\
+  -o clean_photo.jpg
+
+<span class="cm"># With auth + force sanitize</span>
+curl -X POST http://localhost:<span class="num">5050</span>/api/sanitize \\
+  -H <span class="str">"Authorization: Bearer YOUR_KEY"</span> \\
+  -F <span class="str">"file=@photo.jpg"</span> \\
+  -F <span class="str">"force=true"</span> \\
+  -F <span class="str">"webhook_url=https://yoursite.com/webhook"</span> \\
+  -o clean_photo.jpg
+
+<span class="cm"># Check response headers for decision</span>
+<span class="cm"># X-Threat-Detected: true</span>
+<span class="cm"># X-Risk-Score: 87.40</span>
+<span class="cm"># X-Was-Sanitized: true</span>
+<span class="cm"># X-Scan-Duration-Ms: 4821</span>`,
+
+node: `<span class="cm">// Node.js / Express — steggate_client.js SDK</span>
+<span class="kw">const</span> { StegGate } = <span class="fn">require</span>(<span class="str">"./steggate.js"</span>);
+<span class="kw">const</span> client = <span class="kw">new</span> <span class="fn">StegGate</span>(<span class="str">"http://localhost:5050"</span>);
+
+<span class="cm">// Express upload route</span>
+app.<span class="fn">post</span>(<span class="str">"/upload"</span>, upload.<span class="fn">single</span>(<span class="str">"image"</span>), <span class="kw">async</span> (req, res) <span class="kw">=></span> {
+  <span class="kw">const</span> fileBlob = <span class="kw">new</span> <span class="fn">Blob</span>([req.file.buffer]);
+  fileBlob.name  = req.file.originalname;
+
+  <span class="kw">const</span> result = <span class="kw">await</span> client.<span class="fn">sanitize</span>(fileBlob);
+
+  <span class="cm">// Save clean bytes to disk / S3 / etc.</span>
+  <span class="kw">await</span> fs.promises.<span class="fn">writeFile</span>(
+    \`uploads/\${result.outputName}\`,
+    <span class="fn">Buffer</span>.<span class="fn">from</span>(<span class="kw">await</span> result.safeBlob.<span class="fn">arrayBuffer</span>())
+  );
+
+  res.<span class="fn">json</span>({ stored: result.outputName,
+             sanitized: result.wasSanitized,
+             risk: result.riskScore });
+});`
+};
+
+function showTab(lang) {
+  document.querySelectorAll(".code-tab").forEach(t =>
+    t.classList.toggle("active", t.textContent.toLowerCase().includes(lang)));
+  $("codeBlock").innerHTML = CODE[lang] || "";
+}
+showTab("js");
+</script>
+</body>
+</html>

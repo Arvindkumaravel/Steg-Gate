@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>StegGate — Forensic Analysis Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  /* ── Reset & Tokens ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080c0f;
+    --surface:   #0d1318;
+    --surface2:  #111921;
+    --border:    #1c2b35;
+    --border2:   #243545;
+    --text:      #c8d8e4;
+    --text-dim:  #506070;
+    --text-faint:#2a3a48;
+    --accent:    #00d4ff;
+    --accent2:   #0098cc;
+    --green:     #00e57a;
+    --yellow:    #f5c400;
+    --orange:    #ff7c38;
+    --red:       #ff3355;
+    --red-dim:   #3a0a12;
+    --mono:      'Space Mono', monospace;
+    --sans:      'DM Sans', sans-serif;
+  }
+
+  html { font-size: 14px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 400;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scrollbar ──────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--bg);
+    font-family: var(--mono);
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    transition: background 0.3s;
+  }
+  .status-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.warn { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    height: calc(100vh - 56px);
+  }
+
+  /* ── Sidebar ─────────────────────────────────────────────────────────── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .sidebar-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  /* ── Drop Zone ──────────────────────────────────────────────────────── */
+  .dropzone {
+    border: 1px dashed var(--border2);
+    border-radius: 4px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,212,255,0.04);
+  }
+  .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .dropzone-icon {
+    font-size: 1.6rem;
+    margin-bottom: 8px;
+    opacity: 0.5;
+  }
+  .dropzone p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .dropzone .file-name {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+    margin-top: 8px;
+    word-break: break-all;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────── */
+  .btn {
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 10px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    font-weight: 700;
+  }
+  .btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+  .btn.primary:disabled {
+    background: var(--border2);
+    border-color: var(--border2);
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+  .btn.danger { border-color: #2a1a1a; color: var(--text-dim); }
+  .btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── Calibration panel ──────────────────────────────────────────────── */
+  .cal-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    padding: 8px 10px;
+    border-radius: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .cal-status.active { border-color: rgba(0,229,122,0.3); background: rgba(0,229,122,0.05); }
+  .cal-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
+  .cal-status.active .dot { background: var(--green); }
+
+  .cal-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 4px; }
+  .cal-meta span { color: var(--text); }
+
+  /* ── Content area ────────────────────────────────────────────────────── */
+  .content {
+    overflow-y: auto;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* ── Empty state ─────────────────────────────────────────────────────── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 80px 40px;
+  }
+
+  .empty-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 28px);
+    gap: 3px;
+    opacity: 0.15;
+    margin-bottom: 24px;
+  }
+  .empty-grid-cell {
+    width: 28px; height: 28px;
+    border: 1px solid var(--border2);
+    border-radius: 2px;
+    animation: flicker 3s infinite;
+  }
+  .empty-grid-cell:nth-child(3n) { animation-delay: 0.5s; }
+  .empty-grid-cell:nth-child(5n) { animation-delay: 1.1s; }
+  @keyframes flicker {
+    0%, 100% { opacity: 0.3; }
+    50%       { opacity: 1; background: var(--border); }
+  }
+
+  /* ── Result header ───────────────────────────────────────────────────── */
+  .result-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 24px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-header::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--green);
+    transition: background 0.3s;
+  }
+  .result-header.threat::before { background: var(--red); }
+  .result-header.warn::before   { background: var(--orange); }
+
+  .threat-badge {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    padding: 4px 10px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    border: 1px solid;
+  }
+  .badge-clean   { color: var(--green);  border-color: rgba(0,229,122,0.4);  background: rgba(0,229,122,0.08); }
+  .badge-threat  { color: var(--red);    border-color: rgba(255,51,85,0.4);   background: rgba(255,51,85,0.08);  }
+  .badge-warning { color: var(--orange); border-color: rgba(255,124,56,0.4); background: rgba(255,124,56,0.08); }
+
+  .filename-display {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .filename-display strong { color: var(--text); display: block; font-size: 0.85rem; margin-bottom: 2px; }
+
+  /* ── Confidence gauge ────────────────────────────────────────────────── */
+  .gauge-wrap { text-align: center; }
+  .gauge-value {
+    font-family: var(--mono);
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .gauge-value.clean   { color: var(--green); }
+  .gauge-value.warning { color: var(--orange); }
+  .gauge-value.threat  { color: var(--red); }
+  .gauge-label { font-size: 0.68rem; color: var(--text-dim); font-family: var(--mono); letter-spacing: 0.1em; margin-top: 3px; }
+
+  /* ── Metrics grid ────────────────────────────────────────────────────── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .metric-card {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .metric-name {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .metric-val {
+    font-family: var(--mono);
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+  .metric-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+  }
+  .metric-delta {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    margin-top: 6px;
+    color: var(--text-dim);
+  }
+  .delta-anomalous { color: var(--red); }
+  .delta-borderline { color: var(--yellow); }
+  .delta-clean { color: var(--green); }
+
+  /* ── RS panel ────────────────────────────────────────────────────────── */
+  .rs-panel {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .rs-payload-big {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border-right: 1px solid var(--border);
+    padding-right: 16px;
+  }
+
+  .payload-number {
+    font-family: var(--mono);
+    font-size: 2.6rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .payload-label { font-size: 0.7rem; color: var(--text-dim); font-family: var(--mono); letter-spacing: 0.1em; }
+
+  .rs-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .rs-stat-label { font-family: var(--mono); font-size: 0.62rem; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+  .rs-stat-val   { font-family: var(--mono); font-size: 0.88rem; color: var(--text); margin-top: 2px; }
+  .rs-stat-val.positive { color: var(--orange); }
+
+  /* ── Image viewer ────────────────────────────────────────────────────── */
+  .image-viewer {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .viewer-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 9px 18px;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .viewer-content {
+    display: none;
+    padding: 16px;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .viewer-content.active { display: flex; }
+  .viewer-content img {
+    max-width: 100%;
+    max-height: 420px;
+    object-fit: contain;
+    border-radius: 2px;
+    image-rendering: pixelated;
+  }
+
+  /* ── Bitplane panel ──────────────────────────────────────────────────── */
+  .bitplane-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  .bp-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .bp-card.suspicious { border-color: rgba(255,51,85,0.4); background: rgba(255,51,85,0.05); }
+  .bp-title { font-family: var(--mono); font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+  .bp-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .bp-key { font-family: var(--mono); font-size: 0.62rem; color: var(--text-dim); }
+  .bp-val { font-family: var(--mono); font-size: 0.75rem; color: var(--text); }
+  .bp-suspicion-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .bp-suspicion-fill { height: 100%; border-radius: 2px; background: var(--green); transition: width 0.5s; }
+  .bp-suspicion-fill.med { background: var(--yellow); }
+  .bp-suspicion-fill.high { background: var(--red); }
+
+  /* ── Download bar ────────────────────────────────────────────────────── */
+  .download-bar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    align-items: center;
+  }
+  .download-bar span { font-size: 0.78rem; color: var(--text-dim); flex: 1; }
+  .btn-dl {
+    padding: 7px 14px;
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .btn-dl:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-dl.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+  .btn-dl.primary:hover { background: var(--accent2); }
+
+  /* ── Loading overlay ─────────────────────────────────────────────────── */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,15,0.85);
+    z-index: 200;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .loading-overlay.active { display: flex; }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); letter-spacing: 0.1em; }
+
+  /* ── Toast ───────────────────────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 10px 18px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text);
+    z-index: 300;
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all 0.25s;
+    max-width: 320px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: rgba(255,51,85,0.5); color: var(--red); }
+  .toast.success { border-color: rgba(0,229,122,0.4); color: var(--green); }
+
+  /* ── Section title ───────────────────────────────────────────────────── */
+  .section-title {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Uncalibrated notice ─────────────────────────────────────────────── */
+  .notice {
+    padding: 10px 14px;
+    border: 1px solid rgba(245,196,0,0.3);
+    border-radius: 3px;
+    background: rgba(245,196,0,0.05);
+    font-size: 0.75rem;
+    color: var(--yellow);
+    font-family: var(--mono);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  /* ── Tool panels (zsteg / binwalk) ──────────────────────────────────── */
+  .tool-panel {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .tool-panel.has-signal { border-color: rgba(255,51,85,0.4); }
+  .tool-panel.not-available { border-color: var(--border); opacity: 0.6; }
+
+  .tool-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .tool-name {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.06em;
+  }
+  .tool-badge {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    padding: 3px 8px;
+    border-radius: 2px;
+    border: 1px solid;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+  .tool-badge.clean    { color: var(--green);  border-color: rgba(0,229,122,0.4);  background: rgba(0,229,122,0.07); }
+  .tool-badge.signal   { color: var(--orange); border-color: rgba(255,124,56,0.4); background: rgba(255,124,56,0.07); }
+  .tool-badge.threat   { color: var(--red);    border-color: rgba(255,51,85,0.4);  background: rgba(255,51,85,0.07); }
+  .tool-badge.na       { color: var(--text-dim); border-color: var(--border); background: transparent; }
+
+  .tool-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+  .tool-stat {
+    padding: 10px 14px;
+    border-right: 1px solid var(--border);
+  }
+  .tool-stat:last-child { border-right: none; }
+  .tool-stat-label { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+  .tool-stat-val   { font-family: var(--mono); font-size: 0.9rem; color: var(--text); margin-top: 3px; }
+  .tool-stat-val.hot { color: var(--red); }
+  .tool-stat-val.warm { color: var(--orange); }
+
+  .tool-findings {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .tool-finding {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+  }
+  .tool-finding.high { border-color: rgba(255,51,85,0.3); background: rgba(255,51,85,0.04); }
+  .tool-finding.med  { border-color: rgba(255,124,56,0.3); background: rgba(255,124,56,0.04); }
+  .finding-channel { color: var(--accent); min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .finding-desc    { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .finding-stars   { color: var(--yellow); white-space: nowrap; }
+
+  .tool-unavailable {
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tool-unavailable code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 2px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Tool status chips in sidebar ────────────────────────────────────── */
+  .tool-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    padding: 3px 7px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+    margin-top: 4px;
+  }
+  .tool-chip.on  { border-color: rgba(0,229,122,0.3); color: var(--green); }
+  .tool-chip.off { border-color: var(--border); color: var(--text-faint); }
+  .tool-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .rs-panel { grid-template-columns: 1fr; }
+    .rs-payload-big { border-right: none; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+    .bitplane-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">SG</div>
+      STEGGATE
+    </div>
+    <div class="header-status">
+      <div class="status-dot" id="serverDot"></div>
+      <span id="serverLabel">connecting…</span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Scan section -->
+      <div class="sidebar-section">
+        <div class="section-label">Scan Image</div>
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.bmp,.webp,.tiff"/>
+          <div class="dropzone-icon">⬡</div>
+          <p>Drop image here or click to browse</p>
+          <p style="margin-top:6px; font-size:0.7rem;">PNG · JPG · BMP · WEBP · TIFF</p>
+          <div class="file-name" id="fileName" style="display:none;"></div>
+        </div>
+        <button class="btn primary" id="scanBtn" disabled>RUN ANALYSIS</button>
+      </div>
+
+      <!-- Calibration section -->
+      <div class="sidebar-section">
+        <div class="section-label">Calibration Baseline</div>
+        <div class="cal-status" id="calStatus">
+          <div class="dot"></div>
+          <span id="calStatusText">No baseline loaded</span>
+        </div>
+        <div class="cal-meta" id="calMeta" style="display:none;"></div>
+
+        <div style="margin-top:12px;">
+          <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:8px; line-height:1.5;">
+            Upload 2–5 known-clean images from the same source to calibrate thresholds.
+          </div>
+          <div class="dropzone" id="calDropzone" style="padding:18px 12px;">
+            <input type="file" id="calInput" accept=".png,.jpg,.jpeg,.bmp,.webp,.tiff" multiple/>
+            <p style="font-size:0.75rem;">Drop clean images here</p>
+            <div class="file-name" id="calFileName" style="display:none;"></div>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:6px; align-items:center;">
+            <input type="text" id="calSource" placeholder="source (e.g. web, camera)"
+              style="flex:1; padding:7px 10px; background:var(--surface2); border:1px solid var(--border2);
+                     border-radius:3px; color:var(--text); font-family:var(--mono); font-size:0.72rem; outline:none;"/>
+          </div>
+          <button class="btn" id="calBtn" disabled>CALIBRATE</button>
+          <button class="btn danger" id="calClearBtn">CLEAR BASELINE</button>
+        </div>
+      </div>
+
+      <!-- Server info -->
+      <div class="sidebar-section" style="margin-top:auto;">
+        <div class="section-label">Engine</div>
+        <div style="font-family:var(--mono); font-size:0.68rem; color:var(--text-dim); line-height:1.8;">
+          <div>V4.5 · Multi-Bitplane</div>
+          <div>RS Steganalysis</div>
+          <div>Visual Heatmap</div>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="font-family:var(--mono); font-size:0.6rem; color:var(--text-faint); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">External Tools</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <span class="tool-chip" id="chipZsteg"><span class="tool-chip-dot"></span>zsteg</span>
+            <span class="tool-chip" id="chipBinwalk"><span class="tool-chip-dot"></span>binwalk</span>
+          </div>
+        </div>
+        <div style="margin-top:10px; font-family:var(--mono); font-size:0.65rem; color:var(--text-faint);">localhost:5050</div>
+      </div>
+
+    </aside>
+
+    <!-- ── Content ───────────────────────────────────────────────────────── -->
+    <section class="content" id="content">
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-grid" id="emptyGrid"></div>
+        <div>Upload an image to begin forensic analysis</div>
+        <div style="color:var(--text-faint); font-size:0.7rem; margin-top:4px;">
+          LSB · RS Steganalysis · Bitplane · SRM
+        </div>
+      </div>
+
+      <!-- Results (hidden until scan) -->
+      <div id="results" style="display:none; display:flex; flex-direction:column; gap:24px;">
+
+        <!-- Threat header -->
+        <div class="result-header" id="resultHeader">
+          <div class="gauge-wrap">
+            <div class="gauge-value" id="gaugeValue">0%</div>
+            <div class="gauge-label">THREAT CONF.</div>
+          </div>
+          <div class="filename-display">
+            <strong id="resultFilename">—</strong>
+            <span id="resultMeta">—</span>
+          </div>
+          <div class="threat-badge" id="threatBadge">—</div>
+        </div>
+
+        <!-- Uncalibrated notice -->
+        <div class="notice" id="uncalNotice" style="display:none;">
+          ⚠ Running uncalibrated — thresholds are hardcoded. Upload clean reference images in the sidebar for accurate sigma-delta scoring.
+        </div>
+
+        <!-- Features -->
+        <div>
+          <div class="section-title">Signal Metrics</div>
+          <div class="metrics-grid" id="metricsGrid"></div>
+        </div>
+
+        <!-- RS Payload -->
+        <div>
+          <div class="section-title">RS Steganalysis — Payload Estimate</div>
+          <div class="rs-panel">
+            <div class="rs-payload-big">
+              <div class="payload-number" id="rsPayloadNum">—</div>
+              <div class="payload-label">EST. PAYLOAD</div>
+              <div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);margin-top:6px;">of image capacity</div>
+            </div>
+            <div class="rs-details" id="rsDetails"></div>
+          </div>
+        </div>
+
+        <!-- Bitplane analysis -->
+        <div>
+          <div class="section-title">Multi-Bitplane Analysis</div>
+          <div class="bitplane-grid" id="bitplaneGrid"></div>
+        </div>
+
+        <!-- zsteg -->
+        <div>
+          <div class="section-title">zsteg — LSB Channel Scan</div>
+          <div class="tool-panel" id="zstegPanel">
+            <div class="tool-unavailable">
+              <span>⚙</span><span>zsteg not available — <code>gem install zsteg</code></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- binwalk -->
+        <div>
+          <div class="section-title">binwalk — Embedded Signature Scan</div>
+          <div class="tool-panel" id="binwalkPanel">
+            <div class="tool-unavailable">
+              <span>⚙</span><span>binwalk not available — <code>brew install binwalk</code></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image viewer -->
+        <div>
+          <div class="section-title">Forensic Views</div>
+          <div class="image-viewer">
+            <div class="viewer-tabs">
+              <button class="tab active" data-tab="original">Original</button>
+              <button class="tab" data-tab="heatmap">Heatmap</button>
+              <button class="tab" data-tab="sanitized">Sanitized</button>
+            </div>
+            <div class="viewer-content active" id="tab-original">
+              <img id="imgOriginal" src="" alt="Original"/>
+            </div>
+            <div class="viewer-content" id="tab-heatmap">
+              <img id="imgHeatmap" src="" alt="Heatmap"/>
+            </div>
+            <div class="viewer-content" id="tab-sanitized">
+              <img id="imgSanitized" src="" alt="Sanitized"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- Download bar -->
+        <div class="download-bar">
+          <span>Outputs ready</span>
+          <a class="btn-dl" id="dlHeatmap" download="heatmap.png">⬇ Heatmap</a>
+          <a class="btn-dl primary" id="dlSanitized" download="sanitized.jpg">⬇ Sanitized JPEG</a>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">ANALYSING…</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:5050/api';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let selectedFile   = null;
+let selectedCalFiles = [];
+let lastResult     = null;
+
+// ── Empty grid animation ──────────────────────────────────────────────────────
+const grid = document.getElementById('emptyGrid');
+for (let i = 0; i < 32; i++) {
+  const c = document.createElement('div');
+  c.className = 'empty-grid-cell';
+  c.style.animationDelay = `${(i * 0.09).toFixed(2)}s`;
+  grid.appendChild(c);
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = 'toast', 3500);
+}
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+function setLoading(active, text = 'ANALYSING…') {
+  const el = document.getElementById('loadingOverlay');
+  document.getElementById('loadingText').textContent = text;
+  el.classList.toggle('active', active);
+}
+
+// ── Server health ─────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(2000) });
+    const d = await r.json();
+    document.getElementById('serverDot').className    = 'status-dot ok';
+    document.getElementById('serverLabel').textContent = 'engine online';
+    updateCalStatus(d.calibrated, d.cal_source, d.cal_images);
+    if (d.tools) {
+      const cz = document.getElementById('chipZsteg');
+      const cb = document.getElementById('chipBinwalk');
+      cz.className = `tool-chip ${d.tools.zsteg   ? 'on' : 'off'}`;
+      cb.className = `tool-chip ${d.tools.binwalk  ? 'on' : 'off'}`;
+    }
+  } catch {
+    document.getElementById('serverDot').className    = 'status-dot warn';
+    document.getElementById('serverLabel').textContent = 'engine offline';
+  }
+}
+
+async function updateCalUI() {
+  try {
+    const r = await fetch(`${API}/calibration/status`);
+    const d = await r.json();
+    updateCalStatus(d.calibrated, d.source, d.n_images);
+  } catch {}
+}
+
+function updateCalStatus(calibrated, source, n) {
+  const el   = document.getElementById('calStatus');
+  const txt  = document.getElementById('calStatusText');
+  const meta = document.getElementById('calMeta');
+  if (calibrated) {
+    el.className  = 'cal-status active';
+    txt.textContent = 'Baseline active';
+    meta.style.display = '';
+    meta.innerHTML = `Source: <span>${source || '—'}</span> &nbsp;·&nbsp; Images: <span>${n}</span>`;
+  } else {
+    el.className  = 'cal-status';
+    txt.textContent = 'No baseline loaded';
+    meta.style.display = 'none';
+  }
+}
+
+checkHealth();
+setInterval(checkHealth, 10000);
+
+// ── File drop/select ──────────────────────────────────────────────────────────
+const dropzone  = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+function handleScanFile(file) {
+  selectedFile = file;
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileName').style.display = '';
+  document.getElementById('scanBtn').disabled = false;
+}
+
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleScanFile(e.target.files[0]); });
+dropzone.addEventListener('dragover',  e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleScanFile(f);
+});
+
+// Calibration file select
+const calDropzone = document.getElementById('calDropzone');
+const calInput    = document.getElementById('calInput');
+
+function handleCalFiles(files) {
+  selectedCalFiles = Array.from(files);
+  document.getElementById('calFileName').textContent = `${files.length} file(s) selected`;
+  document.getElementById('calFileName').style.display = '';
+  document.getElementById('calBtn').disabled = false;
+}
+
+calInput.addEventListener('change', e => { if (e.target.files.length) handleCalFiles(e.target.files); });
+calDropzone.addEventListener('dragover',  e => { e.preventDefault(); calDropzone.classList.add('drag-over'); });
+calDropzone.addEventListener('dragleave', () => calDropzone.classList.remove('drag-over'));
+calDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  calDropzone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleCalFiles(e.dataTransfer.files);
+});
+
+// ── Scan ──────────────────────────────────────────────────────────────────────
+document.getElementById('scanBtn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+  setLoading(true, 'ANALYSING…');
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  try {
+    const r = await fetch(`${API}/scan`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Scan failed');
+    renderResult(d);
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+});
+
+// ── Calibrate ─────────────────────────────────────────────────────────────────
+document.getElementById('calBtn').addEventListener('click', async () => {
+  if (!selectedCalFiles.length) return;
+  setLoading(true, 'CALIBRATING…');
+
+  const fd = new FormData();
+  selectedCalFiles.forEach(f => fd.append('files', f));
+  fd.append('source', document.getElementById('calSource').value || 'unspecified');
+
+  try {
+    const r = await fetch(`${API}/calibrate`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Calibration failed');
+    updateCalStatus(true, d.source, d.n_images);
+    showToast(`Calibrated on ${d.n_images} image(s)`, 'success');
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+});
+
+document.getElementById('calClearBtn').addEventListener('click', async () => {
+  try {
+    await fetch(`${API}/calibration/clear`, { method: 'POST' });
+    updateCalStatus(false);
+    showToast('Calibration cleared', '');
+  } catch (e) {
+    showToast('Could not reach server', 'error');
+  }
+});
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const name = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.viewer-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+  });
+});
+
+// ── Render result ─────────────────────────────────────────────────────────────
+function riskClass(score) {
+  if (score >= 50) return 'threat';
+  if (score >= 30) return 'warning';
+  return 'clean';
+}
+
+function barColor(feat, val) {
+  const high = { bias_p90: 0.3, chi_norm_mean: 8e-4, lsb_residual_p90: 0.12, bp_suspicion_p90: 0.45 };
+  const low  = { entropy_p10: 0.55 };
+  if (feat in high) return val > high[feat] ? 'var(--red)' : 'var(--accent)';
+  if (feat in low)  return val < low[feat]  ? 'var(--red)' : 'var(--accent)';
+  return 'var(--accent)';
+}
+
+function barFraction(feat, val) {
+  const maxes = {
+    entropy_p10: 1.0, bias_p90: 0.5,
+    chi_norm_mean: 0.002, lsb_residual_p90: 0.3,
+    bp_suspicion_p90: 1.0
+  };
+  const m = maxes[feat] || 1.0;
+  if (feat === 'entropy_p10') return Math.max(0, Math.min(1, 1 - val / m));
+  return Math.max(0, Math.min(1, val / m));
+}
+
+function deltaClass(delta) {
+  if (!delta) return '';
+  if (delta.includes('ANOMALOUS')) return 'delta-anomalous';
+  if (delta.includes('borderline')) return 'delta-borderline';
+  if (delta.includes('CLEAN'))     return 'delta-clean';
+  return '';
+}
+
+function friendlyName(key) {
+  const map = {
+    entropy_p10:      'LSB Entropy P10',
+    bias_p90:         'Bit Bias P90',
+    chi_norm_mean:    'Chi-Square (norm)',
+    lsb_residual_p90: 'SRM Residual P90',
+    bp_suspicion_p90: 'Bitplane Suspicion',
+  };
+  return map[key] || key;
+}
+
+function renderResult(d) {
+  lastResult = d;
+  const score = d.risk_score;
+  const cls   = riskClass(score);
+
+  document.getElementById('emptyState').style.display  = 'none';
+  document.getElementById('results').style.display     = 'flex';
+
+  const hdr = document.getElementById('resultHeader');
+  hdr.className = `result-header ${cls}`;
+
+  const gv = document.getElementById('gaugeValue');
+  gv.textContent = `${score}%`;
+  gv.className   = `gauge-value ${cls}`;
+
+  document.getElementById('resultFilename').textContent = d.filename || '—';
+  document.getElementById('resultMeta').textContent =
+    `${d.blocks_analysed} blocks · ${d.calibrated ? 'calibrated' : 'uncalibrated'}`;
+
+  const badge = document.getElementById('threatBadge');
+  if (score >= 50) {
+    badge.textContent = 'THREAT DETECTED';
+    badge.className   = 'threat-badge badge-threat';
+  } else if (score >= 30) {
+    badge.textContent = 'SUSPICIOUS';
+    badge.className   = 'threat-badge badge-warning';
+  } else {
+    badge.textContent = 'CLEAN';
+    badge.className   = 'threat-badge badge-clean';
+  }
+
+  document.getElementById('uncalNotice').style.display = d.calibrated ? 'none' : '';
+
+  // Metrics grid
+  const mg = document.getElementById('metricsGrid');
+  mg.innerHTML = '';
+  const feats = d.features || {};
+  const deltas = d.delta_report || {};
+  Object.entries(feats).forEach(([key, val]) => {
+    const frac  = barFraction(key, val);
+    const color = barColor(key, val);
+    const delta = deltas[key] || '';
+    mg.innerHTML += `
+      <div class="metric-card">
+        <div class="metric-name">${friendlyName(key)}</div>
+        <div class="metric-val">${val.toFixed(5)}</div>
+        <div class="metric-bar">
+          <div class="metric-bar-fill" style="width:${(frac*100).toFixed(1)}%;background:${color};"></div>
+        </div>
+        ${delta ? `<div class="metric-delta ${deltaClass(delta)}">${delta}</div>` : ''}
+      </div>`;
+  });
+
+  // RS panel
+  const rs = d.rs || {};
+  document.getElementById('rsPayloadNum').textContent = rs.payload_percent || '—';
+  const rsd = document.getElementById('rsDetails');
+  rsd.innerHTML = `
+    <div class="rs-stat">
+      <div class="rs-stat-label">Asymmetry</div>
+      <div class="rs-stat-val ${rs.rs_asymmetry > 0 ? 'positive' : ''}">${(rs.rs_asymmetry||0).toFixed(5)}</div>
+    </div>
+    <div class="rs-stat">
+      <div class="rs-stat-label">Confidence</div>
+      <div class="rs-stat-val">${((rs.confidence||0)*100).toFixed(1)}%</div>
+    </div>
+    <div class="rs-stat">
+      <div class="rs-stat-label">R+ / S+</div>
+      <div class="rs-stat-val">${(rs.R_pos||0).toFixed(4)} / ${(rs.S_pos||0).toFixed(4)}</div>
+    </div>
+    <div class="rs-stat">
+      <div class="rs-stat-label">R− / S−</div>
+      <div class="rs-stat-val">${(rs.R_neg||0).toFixed(4)} / ${(rs.S_neg||0).toFixed(4)}</div>
+    </div>`;
+
+  // Bitplane grid
+  const bd = document.getElementById('bitplaneGrid');
+  bd.innerHTML = '';
+  const featsObj  = d.features  || {};
+  const bpPlanes  = d.bp_planes || {};   // real per-plane values from engine
+  const isJpeg    = d.is_jpeg   || false;
+  [0, 1, 2, 3].forEach(p => {
+    // Use real per-plane value if available, fall back to legacy derivation
+    let susp;
+    if (bpPlanes[String(p)] !== undefined) {
+      susp = bpPlanes[String(p)];
+    } else {
+      susp = p === 0
+        ? (1 - (featsObj.entropy_p10 || 0))
+        : (featsObj.bp_suspicion_p90 || 0) * (p === 3 ? 0.7 : p === 2 ? 0.85 : 1.0);
+    }
+    // For JPEG, planes 1-3 are always normal — DCT makes them high-entropy
+    const jpegNote = (isJpeg && p > 0) ? ' (JPEG — N/A)' : '';
+    const fillClass = susp > 0.6 ? 'high' : susp > 0.3 ? 'med' : '';
+    const suspicious = susp > 0.5 && !(isJpeg && p > 0);
+    bd.innerHTML += `
+      <div class="bp-card ${suspicious ? 'suspicious' : ''}">
+        <div class="bp-title">Bitplane ${p}${p===0?' (LSB)':''}${jpegNote}</div>
+        <div class="bp-row"><span class="bp-key">Suspicion</span><span class="bp-val">${(susp*100).toFixed(1)}%</span></div>
+        <div class="bp-row"><span class="bp-key">Status</span>
+          <span class="bp-val" style="color:${suspicious?'var(--red)':'var(--green)'}">${suspicious?'ANOMALOUS':'Normal'}</span>
+        </div>
+        <div class="bp-suspicion-bar">
+          <div class="bp-suspicion-fill ${fillClass}" style="width:${(susp*100).toFixed(1)}%"></div>
+        </div>
+      </div>`;
+  });
+
+  // Images — original from local file (no round-trip), heatmap + sanitized from server
+  document.getElementById('imgOriginal').src  = URL.createObjectURL(selectedFile);
+  document.getElementById('imgHeatmap').src   = `data:image/png;base64,${d.heatmap_b64}`;
+  document.getElementById('imgSanitized').src = `data:image/jpeg;base64,${d.safe_b64}`;
+
+  // Downloads
+  const base = (d.filename || 'result').replace(/\.[^.]+$/, '');
+  const dlH = document.getElementById('dlHeatmap');
+  const dlS = document.getElementById('dlSanitized');
+  dlH.href = `data:image/png;base64,${d.heatmap_b64}`; dlH.download = `${base}_heatmap.png`;
+  dlS.href = `data:image/jpeg;base64,${d.safe_b64}`;   dlS.download = `${base}_sanitized.jpg`;
+
+  // zsteg + binwalk panels
+  renderZsteg(d.zsteg || {});
+  renderBinwalk(d.binwalk || {});
+
+  // Reset to original tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.viewer-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="original"]').classList.add('active');
+  document.getElementById('tab-original').classList.add('active');
+}
+
+// ── zsteg renderer ────────────────────────────────────────────────────────────
+function renderZsteg(zs) {
+  const panel = document.getElementById('zstegPanel');
+
+  if (!zs.available) {
+    const err = zs.error || 'zsteg not installed';
+    panel.className = 'tool-panel not-available';
+    panel.innerHTML = `<div class="tool-unavailable">⚙ &nbsp;${err} &nbsp;→&nbsp; <code>gem install zsteg</code></div>`;
+    return;
+  }
+
+  const hasSignal   = zs.signal_count > 0;
+  const hasEmbedded = zs.has_embedded;
+  let badgeClass = 'clean', badgeText = 'CLEAN';
+  if (hasEmbedded)       { badgeClass = 'threat';  badgeText = 'EMBEDDED FILE'; }
+  else if (zs.has_text)  { badgeClass = 'signal';  badgeText = 'TEXT FOUND'; }
+  else if (hasSignal)    { badgeClass = 'signal';  badgeText = `${zs.signal_count} SIGNAL${zs.signal_count > 1 ? 'S' : ''}`; }
+
+  panel.className = `tool-panel${hasEmbedded || zs.has_text ? ' has-signal' : ''}`;
+
+  let findingsHtml = '';
+  if (zs.findings && zs.findings.length) {
+    findingsHtml = `<div class="tool-findings">`;
+    zs.findings.slice(0, 10).forEach(f => {
+      const cls   = f.signal_strength >= 2 ? 'high' : 'med';
+      const stars = '★'.repeat(Math.min(f.signal_strength, 4));
+      findingsHtml += `
+        <div class="tool-finding ${cls}">
+          <span class="finding-channel">${f.channel}</span>
+          <span class="finding-desc">${f.description}</span>
+          <span class="finding-stars">${stars}</span>
+        </div>`;
+    });
+    findingsHtml += `</div>`;
+  } else {
+    findingsHtml = `<div class="tool-unavailable" style="color:var(--green);">✓ &nbsp;No steganographic signals detected in any channel</div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="tool-header">
+      <span class="tool-name">zsteg</span>
+      <span class="tool-badge ${badgeClass}">${badgeText}</span>
+    </div>
+    <div class="tool-stats">
+      <div class="tool-stat">
+        <div class="tool-stat-label">Signals</div>
+        <div class="tool-stat-val ${zs.signal_count > 0 ? 'hot' : ''}">${zs.signal_count}</div>
+      </div>
+      <div class="tool-stat">
+        <div class="tool-stat-label">Has Text</div>
+        <div class="tool-stat-val ${zs.has_text ? 'warm' : ''}">${zs.has_text ? 'YES' : 'no'}</div>
+      </div>
+      <div class="tool-stat">
+        <div class="tool-stat-label">Embedded</div>
+        <div class="tool-stat-val ${zs.has_embedded ? 'hot' : ''}">${zs.has_embedded ? 'YES' : 'no'}</div>
+      </div>
+      <div class="tool-stat">
+        <div class="tool-stat-label">Risk Boost</div>
+        <div class="tool-stat-val ${zs.risk_boost > 0 ? 'warm' : ''}">+${((zs.risk_boost||0)*100).toFixed(0)}%</div>
+      </div>
+    </div>
+    ${findingsHtml}`;
+}
+
+// ── binwalk renderer ──────────────────────────────────────────────────────────
+function renderBinwalk(bw) {
+  const panel = document.getElementById('binwalkPanel');
+
+  if (!bw.available) {
+    const err = bw.error || 'binwalk not installed';
+    panel.className = 'tool-panel not-available';
+    panel.innerHTML = `<div class="tool-unavailable">⚙ &nbsp;${err} &nbsp;→&nbsp; <code>brew install binwalk</code></div>`;
+    return;
+  }
+
+  const hasThreats  = bw.threat_entries > 0;
+  const hasAppended = bw.has_appended;
+  const lsbHit      = bw.lsb_has_content;
+
+  let badgeClass = 'clean', badgeText = 'CLEAN';
+  if (lsbHit && hasThreats)      { badgeClass = 'threat'; badgeText = 'LSB CONTENT DETECTED'; }
+  else if (lsbHit)               { badgeClass = 'threat'; badgeText = 'LSB CONTENT DETECTED'; }
+  else if (hasThreats && hasAppended) { badgeClass = 'threat';  badgeText = 'APPENDED + THREATS'; }
+  else if (hasThreats)           { badgeClass = 'signal'; badgeText = `${bw.threat_entries} THREAT SIG${bw.threat_entries > 1 ? 'S' : ''}`; }
+  else if (hasAppended)          { badgeClass = 'signal'; badgeText = 'APPENDED DATA'; }
+  else if (bw.entropy_spike)     { badgeClass = 'signal'; badgeText = 'ENTROPY SPIKE'; }
+
+  panel.className = `tool-panel${lsbHit || hasThreats || hasAppended ? ' has-signal' : ''}`;
+
+  // LSB findings section — most important for steganocrypt-style embeds
+  let lsbHtml = '';
+  if (bw.lsb_findings && bw.lsb_findings.length) {
+    lsbHtml = `
+      <div style="padding:10px 16px 0; font-family:var(--mono); font-size:0.62rem;
+                  color:var(--red); letter-spacing:0.1em; text-transform:uppercase;">
+        LSB Stream — Hidden Content
+      </div>
+      <div class="tool-findings">`;
+    bw.lsb_findings.forEach(f => {
+      lsbHtml += `
+        <div class="tool-finding high" style="flex-direction:column; align-items:flex-start; gap:4px;">
+          <div style="display:flex; gap:10px; width:100%; justify-content:space-between;">
+            <span class="finding-channel">offset ${f.lsb_offset}</span>
+            <span style="font-family:var(--mono);font-size:0.65rem;color:var(--orange);">${f.marker}</span>
+          </div>
+          <span style="font-family:var(--mono);font-size:0.68rem;color:var(--text);
+                       word-break:break-all;opacity:0.85;">${f.snippet}</span>
+        </div>`;
+    });
+    lsbHtml += `</div>`;
+  }
+
+  // File signature entries
+  let entriesHtml = '';
+  if (bw.entries && bw.entries.length) {
+    entriesHtml = `<div class="tool-findings">`;
+    bw.entries.slice(0, 10).forEach(e => {
+      const cls  = e.is_threat ? 'high' : '';
+      const src  = e.source === 'lsb_stream' ? ' [LSB]' : '';
+      const flag = e.is_threat ? ' ⚠' : '';
+      entriesHtml += `
+        <div class="tool-finding ${cls}">
+          <span class="finding-channel">${e.hex_offset}${src}</span>
+          <span class="finding-desc">${e.description}${flag}</span>
+          <span class="finding-stars">${e.is_threat ? '⚠' : ''}</span>
+        </div>`;
+    });
+    entriesHtml += `</div>`;
+  } else if (!lsbHit) {
+    entriesHtml = `<div class="tool-unavailable" style="color:var(--green);">✓ &nbsp;No suspicious signatures found</div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="tool-header">
+      <span class="tool-name">binwalk</span>
+      <span class="tool-badge ${badgeClass}">${badgeText}</span>
+    </div>
+    <div class="tool-stats">
+      <div class="tool-stat">
+        <div class="tool-stat-label">Signatures</div>
+        <div class="tool-stat-val">${bw.total_entries}</div>
+      </div>
+      <div class="tool-stat">
+        <div class="tool-stat-label">Threats</div>
+        <div class="tool-stat-val ${bw.threat_entries > 0 ? 'hot' : ''}">${bw.threat_entries}</div>
+      </div>
+      <div class="tool-stat">
+        <div class="tool-stat-label">LSB Content</div>
+        <div class="tool-stat-val ${bw.lsb_has_content ? 'hot' : ''}">${bw.lsb_has_content ? 'YES' : 'no'}</div>
+      </div>
+      <div class="tool-stat">
+        <div class="tool-stat-label">Risk Boost</div>
+        <div class="tool-stat-val ${bw.risk_boost > 0 ? 'warm' : ''}">+${((bw.risk_boost||0)*100).toFixed(0)}%</div>
+      </div>
+    </div>
+    ${lsbHtml}
+    ${entriesHtml}`;
+}
+
+
+</script>
+</body>
+</html>
